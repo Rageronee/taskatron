@@ -1,0 +1,55 @@
+{
+  "rules": {
+    "tasks": {
+      "$uid": {
+        // Hanya user yang terautentikasi dan memiliki UID yang sama yang dapat membaca/menulis
+        ".read": "$uid === auth.uid",
+        ".write": "$uid === auth.uid",
+        "$taskId": {
+          // Validasi struktur data
+          ".validate": "newData.hasChildren(['title', 'deadline', 'description', 'userId', 'createdAt'])",
+          "title": {
+            ".validate": "newData.isString() && newData.val().length > 0"
+          },
+          "deadline": {
+            ".validate": "newData.isString() && newData.val().length > 0"
+          },
+          "description": {
+            ".validate": "newData.isString()"
+          },
+          "userId": {
+            ".validate": "newData.val() === auth.uid"
+          },
+          "createdAt": {
+            ".validate": "newData.isString()"
+          },
+          "lastModified": {
+            ".validate": "newData.isString()"
+          },
+          "modifiedBy": {
+            ".validate": "newData.isString()"
+          }
+        }
+      }
+    },
+    "activity_logs": {
+      "$uid": {
+        // Hanya user yang terautentikasi dan memiliki UID yang sama yang dapat membaca/menulis log
+        ".read": "$uid === auth.uid",
+        ".write": "$uid === auth.uid",
+        "$logId": {
+          ".validate": "newData.hasChildren(['action', 'timestamp', 'userId'])",
+          "action": {
+            ".validate": "newData.isString()"
+          },
+          "timestamp": {
+            ".validate": "newData.isString()"
+          },
+          "userId": {
+            ".validate": "newData.val() === auth.uid"
+          }
+        }
+      }
+    }
+  }
+} 
