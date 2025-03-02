@@ -9,6 +9,8 @@ import { CourseSelector } from './components/CourseSelector';
 import { AddCourseModal } from './components/AddCourseModal';
 import { Footer } from './components/Footer';
 import { SunIcon, MoonIcon, ArrowPathIcon } from '@heroicons/react/24/outline';
+import { ClassSelection } from './components/ClassSelection';
+import { TaskDetailModal } from './components/TaskDetailModal';
 
 const Container = styled.div<{ $isDark: boolean }>`
   min-height: 100vh;
@@ -42,19 +44,38 @@ const defaultCourses: Course[] = [
 ];
 
 function App() {
+  // Inisialisasi currentClass terlebih dahulu
+  const [currentClass, setCurrentClass] = useState(() => {
+    // Cek apakah ini pertama kali user mengakses
+    const isFirstVisit = !localStorage.getItem('hasVisited');
+    if (isFirstVisit) {
+      // Jika pertama kali, hapus kelas yang mungkin tersimpan
+      localStorage.removeItem('selectedClass');
+      localStorage.setItem('hasVisited', 'true');
+      return '';
+    }
+    // Jika bukan pertama kali, ambil kelas yang tersimpan
+    return localStorage.getItem('selectedClass') || '';
+  });
+
+  // Kemudian gunakan currentClass untuk inisialisasi tasks dan courses
   const [tasks, setTasks] = useState<Task[]>(() => {
-    const saved = localStorage.getItem('tasks');
+    if (!currentClass) return [];
+    const saved = localStorage.getItem(`tasks_${currentClass}`);
     return saved ? JSON.parse(saved) : [];
   });
   
   const [courses, setCourses] = useState<Course[]>(() => {
-    const saved = localStorage.getItem('courses');
+    if (!currentClass) return defaultCourses;
+    const saved = localStorage.getItem(`courses_${currentClass}`);
     return saved ? JSON.parse(saved) : defaultCourses;
   });
-  
-  const [selectedCourseId, setSelectedCourseId] = useState<string | null>(null);
+
   const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
   const [isCourseModalOpen, setIsCourseModalOpen] = useState(false);
+  const [selectedCourseId, setSelectedCourseId] = useState<string | null>(null);
+  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
+  
   const [isDark, setIsDark] = useState(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('darkMode');
@@ -64,13 +85,19 @@ function App() {
     return false;
   });
 
+  // Save tasks when they change
   useEffect(() => {
-    localStorage.setItem('tasks', JSON.stringify(tasks));
-  }, [tasks]);
+    if (currentClass) {
+      localStorage.setItem(`tasks_${currentClass}`, JSON.stringify(tasks));
+    }
+  }, [tasks, currentClass]);
 
+  // Save courses when they change
   useEffect(() => {
-    localStorage.setItem('courses', JSON.stringify(courses));
-  }, [courses]);
+    if (currentClass) {
+      localStorage.setItem(`courses_${currentClass}`, JSON.stringify(courses));
+    }
+  }, [courses, currentClass]);
 
   useEffect(() => {
     localStorage.setItem('darkMode', JSON.stringify(isDark));
@@ -87,19 +114,21 @@ function App() {
   }, []);
 
   const handleAddTask = (newTask: Omit<Task, 'id' | 'completed'>) => {
-    const task: Task = {
-      ...newTask,
-      id: crypto.randomUUID(),
-      completed: false,
-    };
-    
-    setTasks(prev => [...prev, task]);
-    toast.success('Tugas berhasil ditambahkan!', {
-      style: {
-        background: isDark ? '#1e293b' : '#ffffff',
-        color: isDark ? '#e2e8f0' : '#0f172a',
-      },
-    });
+    try {
+      const task: Task = {
+        ...newTask,
+        id: crypto.randomUUID(),
+        completed: false,
+        deadline: new Date(newTask.deadline).toISOString()
+      };
+      
+      setTasks(prev => [...prev, task]);
+      toast.success('Tugas berhasil ditambahkan!');
+      setIsTaskModalOpen(false);
+    } catch (error) {
+      console.error('Error adding task:', error);
+      toast.error('Gagal menambahkan tugas');
+    }
   };
 
   const handleAddCourse = (newCourse: Omit<Course, 'id'>) => {
@@ -131,15 +160,24 @@ function App() {
   };
 
   const handleUpdateTask = (taskId: string, updates: Partial<Task>) => {
-    setTasks(prev => prev.map(task => 
-      task.id === taskId ? { ...task, ...updates } : task
-    ));
-    toast.success('Task updated successfully!', {
-      style: {
-        background: isDark ? '#1e293b' : '#ffffff',
-        color: isDark ? '#e2e8f0' : '#0f172a',
-      },
-    });
+    try {
+      setTasks(prev => prev.map(task => 
+        task.id === taskId ? { 
+          ...task, 
+          ...updates,
+          deadline: updates.deadline 
+            ? (updates.deadline instanceof Date 
+                ? updates.deadline.toISOString() 
+                : updates.deadline)
+            : task.deadline
+        } : task
+      ));
+
+      toast.success('Tugas berhasil diperbarui!');
+    } catch (error) {
+      console.error('Error updating task:', error);
+      toast.error('Gagal memperbarui tugas');
+    }
   };
 
   const handleDeleteCourse = (courseId: string) => {
@@ -170,9 +208,68 @@ function App() {
     });
   };
 
+  const handleToggleComplete = (taskId: string) => {
+    try {
+      setTasks(prev => prev.map(task => 
+        task.id === taskId ? { ...task, completed: !task.completed } : task
+      ));
+    } catch (error) {
+      console.error('Error toggling task completion:', error);
+      toast.error('Gagal mengubah status tugas');
+    }
+  };
+
   const filteredTasks = selectedCourseId
     ? tasks.filter(task => task.courseId === selectedCourseId)
     : tasks;
+
+  const toggleTheme = () => {
+    const newTheme = !isDark;
+    setIsDark(newTheme);
+    localStorage.setItem('darkMode', String(newTheme));
+    if (newTheme) {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+  };
+
+  // Handle class selection
+  const handleSelectClass = (className: string) => {
+    setCurrentClass(className);
+    localStorage.setItem('selectedClass', className);
+    
+    // Load data for the selected class
+    const savedTasks = localStorage.getItem(`tasks_${className}`);
+    const savedCourses = localStorage.getItem(`courses_${className}`);
+    
+    setTasks(savedTasks ? JSON.parse(savedTasks) : []);
+    setCourses(savedCourses ? JSON.parse(savedCourses) : defaultCourses);
+  };
+
+  // Handle class switching
+  const handleSwitchClass = () => {
+    // Save current class data before switching
+    if (currentClass) {
+      localStorage.setItem(`tasks_${currentClass}`, JSON.stringify(tasks));
+      localStorage.setItem(`courses_${currentClass}`, JSON.stringify(courses));
+    }
+    
+    // Reset class selection
+    setCurrentClass('');
+    localStorage.removeItem('selectedClass');
+  };
+
+  // Show class selection if no class is selected
+  if (!currentClass) {
+    return (
+      <ClassSelection 
+        isDark={isDark}
+        onToggleTheme={() => setIsDark(!isDark)}
+        onSelectClass={handleSelectClass}
+      />
+    );
+  }
 
   return (
     <Container $isDark={isDark}>
@@ -180,17 +277,33 @@ function App() {
       
       <div className="flex-1 max-w-7xl mx-auto w-full py-8 px-4">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8">
-          <div>
-            <h1 className={`text-4xl font-bold ${
-              isDark ? 'text-white' : 'text-slate-900'
-            }`}>
+          <div className="flex items-center gap-4">
+            <h1 className={`text-4xl font-bold ${isDark ? 'text-white' : 'text-slate-900'}`}>
               TaskaTronika
             </h1>
+            <span className={`text-sm px-3 py-1 rounded-full ${
+              isDark ? 'bg-slate-700 text-slate-200' : 'bg-slate-200 text-slate-700'
+            }`}>
+              Kelas {currentClass}
+            </span>
           </div>
           
           <div className="flex items-center gap-4">
+            {/* Tombol ganti kelas */}
             <button
-              onClick={() => setIsDark(!isDark)}
+              onClick={handleSwitchClass}
+              className={`p-2 rounded-lg ${
+                isDark 
+                  ? 'bg-slate-700 text-slate-200 hover:bg-slate-600' 
+                  : 'bg-slate-200 text-slate-700 hover:bg-slate-300'
+              } transition-colors`}
+              title="Ganti Kelas"
+            >
+              <span className="material-icons">meeting_room</span>
+            </button>
+
+            <button
+              onClick={toggleTheme}
               className={`p-2 rounded-lg ${
                 isDark 
                   ? 'bg-slate-700 text-slate-200 hover:bg-slate-600' 
@@ -239,6 +352,7 @@ function App() {
                   task={task}
                   onDelete={handleDeleteTask}
                   onUpdate={handleUpdateTask}
+                  onToggleComplete={handleToggleComplete}
                   isDark={isDark}
                   courses={courses}
                 />
@@ -264,13 +378,28 @@ function App() {
 
       <AnimatePresence>
         {isTaskModalOpen && (
-          <AddTaskModal
-            isOpen={isTaskModalOpen}
-            onClose={() => setIsTaskModalOpen(false)}
-            onAdd={handleAddTask}
-            isDark={isDark}
-            courses={courses}
-          />
+          selectedTaskId ? (
+            <TaskDetailModal
+              task={tasks.find(t => t.id === selectedTaskId)!}
+              courses={courses}
+              isOpen={isTaskModalOpen}
+              onClose={() => {
+                setIsTaskModalOpen(false);
+                setSelectedTaskId(null);
+              }}
+              isDark={isDark}
+              onUpdate={handleUpdateTask}
+              onToggleComplete={handleToggleComplete}
+            />
+          ) : (
+            <AddTaskModal
+              isOpen={isTaskModalOpen}
+              onClose={() => setIsTaskModalOpen(false)}
+              onAdd={handleAddTask}
+              isDark={isDark}
+              courses={courses}
+            />
+          )
         )}
         {isCourseModalOpen && (
           <AddCourseModal

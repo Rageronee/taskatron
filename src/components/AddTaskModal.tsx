@@ -3,6 +3,8 @@ import { motion } from 'framer-motion';
 import styled from 'styled-components';
 import { XMarkIcon } from '@heroicons/react/24/outline';
 import { Task, Course } from '../types/Task';
+import { toast } from 'react-hot-toast';
+import { format } from 'date-fns';
 
 const Overlay = styled(motion.div)`
   position: fixed;
@@ -42,8 +44,8 @@ export function AddTaskModal({ isOpen, onClose, onAdd, isDark, courses }: AddTas
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [deadline, setDeadline] = useState('');
-  const [submissionLink, setSubmissionLink] = useState('');
   const [courseId, setCourseId] = useState('');
+  const [submissionLink, setSubmissionLink] = useState('');
 
   const sortedCourses = [...courses].sort((a, b) => 
     a.name.localeCompare(b.name, 'id', { sensitivity: 'base' })
@@ -52,20 +54,46 @@ export function AddTaskModal({ isOpen, onClose, onAdd, isDark, courses }: AddTas
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     
-    onAdd({
-      title,
-      description,
-      deadline: new Date(deadline),
-      submissionLink: submissionLink || undefined,
-      courseId: courseId || undefined,
-    });
+    try {
+      if (!title.trim()) {
+        toast.error('Judul tugas tidak boleh kosong!');
+        return;
+      }
 
-    setTitle('');
-    setDescription('');
-    setDeadline('');
-    setSubmissionLink('');
-    setCourseId('');
-    onClose();
+      if (!deadline) {
+        toast.error('Deadline harus diisi!');
+        return;
+      }
+
+      onAdd({
+        title: title.trim(),
+        description: description.trim(),
+        deadline: new Date(deadline).toISOString(),
+        courseId: courseId || undefined,
+        submissionLink: submissionLink.trim() || undefined
+      });
+
+      // Reset form
+      setTitle('');
+      setDescription('');
+      setDeadline('');
+      setCourseId('');
+      setSubmissionLink('');
+      
+      onClose();
+    } catch (error) {
+      console.error('Error submitting task:', error);
+      toast.error('Gagal menambahkan tugas');
+    }
+  };
+
+  const handleDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setDeadline(e.target.value);
+  };
+
+  // Format date for input
+  const formatDateForInput = (date: Date) => {
+    return format(date, "yyyy-MM-dd'T'HH:mm");
   };
 
   if (!isOpen) return null;
@@ -175,7 +203,7 @@ export function AddTaskModal({ isOpen, onClose, onAdd, isDark, courses }: AddTas
               type="datetime-local"
               required
               value={deadline}
-              onChange={e => setDeadline(e.target.value)}
+              onChange={handleDateChange}
               className={`w-full px-3 py-2 rounded-md 
                 ${isDark 
                   ? 'bg-slate-800 border-slate-600 text-white focus:border-primary-500' 

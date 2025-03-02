@@ -40,6 +40,7 @@ interface TaskDetailModalProps {
   onClose: () => void;
   isDark: boolean;
   onUpdate: (taskId: string, updates: Partial<Task>) => void;
+  onToggleComplete: (taskId: string, completed: boolean) => void;
 }
 
 // Tambahkan CSS global untuk scrollbar
@@ -70,12 +71,13 @@ export function TaskDetailModal({
   isOpen, 
   onClose, 
   isDark,
-  onUpdate 
+  onUpdate,
+  onToggleComplete
 }: TaskDetailModalProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [editedTitle, setEditedTitle] = useState(task.title);
   const [editedDescription, setEditedDescription] = useState(task.description);
-  const [editedDeadline, setEditedDeadline] = useState(new Date(task.deadline));
+  const [editedDeadline, setEditedDeadline] = useState(() => new Date(task.deadline));
   const [editedSubmissionLink, setEditedSubmissionLink] = useState(task.submissionLink || '');
 
   const MAX_DESCRIPTION_LENGTH = 2500;
@@ -100,14 +102,38 @@ export function TaskDetailModal({
       return;
     }
 
-    onUpdate(task.id, {
-      title: editedTitle.trim(),
-      description: editedDescription.trim(),
-      deadline: editedDeadline.toISOString(),
-      submissionLink: editedSubmissionLink.trim(),
-    });
-    setIsEditing(false);
-    toast.success('Tugas berhasil diperbarui!');
+    try {
+      onUpdate(task.id, {
+        title: editedTitle.trim(),
+        description: editedDescription.trim(),
+        deadline: editedDeadline.toISOString(),
+        submissionLink: editedSubmissionLink.trim(),
+      });
+      setIsEditing(false);
+    } catch (error) {
+      console.error('Error saving task:', error);
+      toast.error('Gagal menyimpan perubahan');
+    }
+  };
+
+  const handleDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    try {
+      const newDate = new Date(e.target.value);
+      if (!isNaN(newDate.getTime())) {
+        // Preserve the current time when changing date
+        const currentDate = editedDeadline;
+        newDate.setHours(currentDate.getHours());
+        newDate.setMinutes(currentDate.getMinutes());
+        setEditedDeadline(newDate);
+      }
+    } catch (error) {
+      console.error('Error setting date:', error);
+    }
+  };
+
+  // Format date for input
+  const formatDateForInput = (date: Date) => {
+    return format(date, "yyyy-MM-dd'T'HH:mm");
   };
 
   const handleCancel = () => {
@@ -273,8 +299,8 @@ export function TaskDetailModal({
                   </label>
                   <input
                     type="datetime-local"
-                    value={format(editedDeadline, "yyyy-MM-dd'T'HH:mm")}
-                    onChange={e => setEditedDeadline(new Date(e.target.value))}
+                    value={formatDateForInput(editedDeadline)}
+                    onChange={handleDateChange}
                     className={`w-full px-3 py-2 rounded ${
                       isDark 
                         ? 'bg-slate-800 text-slate-300 border-slate-700' 
